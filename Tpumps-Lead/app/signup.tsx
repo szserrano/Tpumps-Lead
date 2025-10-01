@@ -12,7 +12,8 @@ import {
 } from 'react-native';
 import { Link, router } from 'expo-router';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../firebaseConfig';
+import { auth, db } from '../firebaseConfig';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function SignupScreen() {
   const [email, setEmail] = useState('');
@@ -38,7 +39,19 @@ export default function SignupScreen() {
 
     setLoading(true);
     try {
-      await createUserWithEmailAndPassword(auth, email, password);
+      // Create user in Firebase Auth
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      // Create user in Firestore
+      await setDoc(doc(db, 'users', email), {
+        name: "",
+        profilePhotoURL: "",
+        email: user.email,
+        dateJoined: serverTimestamp(),
+      });
+
+      // Navigate to home screen
       router.replace('/(tabs)');
     } catch (error: any) {
       Alert.alert('Signup Failed', error.message);
