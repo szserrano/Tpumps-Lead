@@ -26,8 +26,8 @@ export default function TabLayout() {
       <Tabs.Screen
         name="explore"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          title: 'Tips',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="lightbulb.fill" color={color} />,
         }}
       />
       <Tabs.Screen
@@ -48,6 +48,13 @@ export default function TabLayout() {
         name="performance"
         options={{
           title: 'Performance',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="stopwatch" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Profile',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="stopwatch" color={color} />,
         }}
       />
