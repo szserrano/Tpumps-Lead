@@ -9,8 +9,38 @@ import { Link, router } from 'expo-router';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../../firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
+import { useEffect,useState } from 'react';
 
 export default function ProfileScreen() {
+  const [profile, setProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const user = auth.currentUser;
+        console.log(user);
+        if (!user) return;
+        const docRef = doc(db, 'users', user.uid);
+        const docSnap = await getDoc(docRef);
+        console.log(docSnap.data());
+
+        if(docSnap.exists()) {
+          setProfile(docSnap.data());
+        }
+      } catch (error) {
+        Alert.alert('Error', 'Failed to fetch profile');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProfile();
+  }, []);
+
+  if (loading) {
+    return <ThemedText>Loading...</ThemedText>;
+  }
   const handleSignOut = async () => {
     try {
       await signOut(auth);
@@ -33,59 +63,18 @@ export default function ProfileScreen() {
         <ThemedText type="title">Profile</ThemedText>
         <HelloWave />
       </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Welcome, User</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+      {profile ? (
+        <ThemedView style={styles.stepContainer}>
+          <ThemedText type="subtitle">Welcome, {profile.name || "No Name Set"}</ThemedText>
+          <ThemedText>Email: {profile.email}</ThemedText>
+          <ThemedText>Date Joined: {profile.dateJoined.toDate().toLocaleDateString() || "No Date Set"}</ThemedText>
+        </ThemedView>
+      ) : (
+        <ThemedView style={styles.stepContainer}>
+          <ThemedText>No profile found</ThemedText>
+        </ThemedView>
+      )}
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
       <ThemedView style={styles.stepContainer}>
         <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
           <ThemedText style={styles.signOutText}>Sign Out</ThemedText>

@@ -16,13 +16,14 @@ import { auth, db } from '../firebaseConfig';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function SignupScreen() {
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSignup = async () => {
-    if (!email || !password || !confirmPassword) {
+    if (!name ||!email || !password || !confirmPassword) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
@@ -44,8 +45,8 @@ export default function SignupScreen() {
       const user = userCredential.user;
 
       // Create user in Firestore
-      await setDoc(doc(db, 'users', email), {
-        name: "",
+      await setDoc(doc(db, 'users', user.uid), {
+        name: name,
         profilePhotoURL: "",
         email: user.email,
         dateJoined: serverTimestamp(),
@@ -75,6 +76,15 @@ export default function SignupScreen() {
         </View>
         <Text style={styles.title}>Create Account</Text>
         <Text style={styles.subtitle}>New Lead? Sign up to get started</Text>
+
+        <TextInput
+          style={styles.input}
+          placeholder="Name"
+          placeholderTextColor="#999"
+          value={name}
+          onChangeText={setName}
+          autoCapitalize="none"
+        />
 
         <TextInput
           style={styles.input}
