@@ -75,33 +75,40 @@ export default function ProfileScreen() {
         <ThemedText type="title">Profile</ThemedText>
         <HelloWave />
       </ThemedView>
-      {profile ? (
-        <ThemedView style={styles.stepContainer}>
-          {profile.profilePhotoURL && (
-            <Image
-              source={{ uri: profile.profilePhotoURL }}
-              style={styles.profileImage}
-            />
-          )}
-          <ThemedText type="subtitle">Welcome, {profile.name || "No Name Set"}</ThemedText>
-          <ThemedText>Email: {profile.email}</ThemedText>
-          <ThemedText>Date Joined: {profile.dateJoined.toDate().toLocaleDateString() || "No Date Set"}</ThemedText>
-        </ThemedView>
-      ) : (
-        <ThemedView style={styles.stepContainer}>
-          <ThemedText>No profile found</ThemedText>
-        </ThemedView>
-      )}
+      <ThemedView style={styles.profileContainer}>
+        {profile ? (
+          <ThemedView style={styles.profileInfo}>
+            {profile.profilePhotoURL && (
+              <Image
+                source={{ uri: profile.profilePhotoURL }}
+                style={styles.profileImage}
+              />
+            )}
+            <ThemedText type="subtitle" style={styles.welcomeText}>
+              Welcome, {profile.name || "No Name Set"}
+            </ThemedText>
+            <ThemedText style={styles.emailText}>{profile.email}</ThemedText>
+            <ThemedText style={styles.emailText}>Joined {profile.dateJoined.toDate().toLocaleDateString() || "No Date Set"}</ThemedText>
+          </ThemedView>
+        ) : (
+          <ThemedView style={styles.profileInfo}>
+            <ThemedText>No profile found</ThemedText>
+          </ThemedView>
+        )}
 
-      <ThemedView style={styles.stepContainer}>
-        <TouchableOpacity style={styles.editProfileButton} onPress={() => router.push("../edit")}>
-          <ThemedText style={styles.signOutText}>Edit Profile</ThemedText>
-        </TouchableOpacity>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-          <ThemedText style={styles.signOutText}>Sign Out</ThemedText>
-        </TouchableOpacity>
+        <ThemedView style={styles.buttonsContainer}>
+          <TouchableOpacity style={styles.editProfileButton} onPress={() => router.push("../edit")}>
+            <ThemedText style={styles.buttonText}>Edit Profile</ThemedText>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.changePasswordButton} onPress={() => router.push("../password")}>
+            <ThemedText style={styles.buttonText}>Change Password</ThemedText>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
+            <ThemedText style={styles.buttonText}>Sign Out</ThemedText>
+          </TouchableOpacity>
+        </ThemedView>
       </ThemedView>
     </ParallaxScrollView>
   );
@@ -118,7 +125,59 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    marginBottom: 16,
   },
+  profileContainer: {
+    flex: 1,
+    paddingHorizontal: 8,
+  },
+  profileInfo: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  profileImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    marginBottom: 8,
+    alignSelf: 'center',
+  },
+  welcomeText: {
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  emailText: {
+    textAlign: 'center',
+    opacity: 0.7,
+    fontSize: 14,
+  },
+  buttonsContainer: {
+    gap: 12,
+  },
+  editProfileButton: {
+    backgroundColor: '#0065CB',
+    borderRadius: 8,
+    padding: 14,
+    alignItems: 'center',
+  },
+  changePasswordButton: {
+    backgroundColor: '#0065CB',
+    borderRadius: 8,
+    padding: 14,
+    alignItems: 'center',
+  },
+  signOutButton: {
+    backgroundColor: '#FF3B30',
+    borderRadius: 8,
+    padding: 14,
+    alignItems: 'center',
+  },
+  buttonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  // Keep legacy styles for compatibility
   stepContainer: {
     gap: 8,
     marginBottom: 8,
@@ -130,30 +189,9 @@ const styles = StyleSheet.create({
     left: 0,
     position: 'absolute',
   },
-  signOutButton: {
-    backgroundColor: '#FF3B30',
-    borderRadius: 8,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  editProfileButton: {
-    backgroundColor: '#0065CB',
-    borderRadius: 8,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 16,
-  },
   signOutText: {
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
-  },
-  profileImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    marginBottom: 16,
-    alignSelf: 'center',
   },
 });
