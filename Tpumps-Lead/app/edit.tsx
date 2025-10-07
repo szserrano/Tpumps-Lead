@@ -10,9 +10,11 @@ import { ThemedView } from '@/components/themed-view';
 
 export default function EditScreen() {
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [profilePhotoURL, setProfilePhotoURL] = useState('');
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [emailError, setEmailError] = useState('');
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -24,11 +26,28 @@ export default function EditScreen() {
       if (snap.exists()) {
         const data = snap.data();
         setName(data.name || "");
+        setEmail(data.email || "");
         setProfilePhotoURL(data.profilePhotoURL || "");
       }
     };
     fetchProfile();
   }, []);
+
+  // Email validation function
+  const validateEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  // Handle email input change with validation
+  const handleEmailChange = (text: string) => {
+    setEmail(text);
+    if (text.length > 0 && !validateEmail(text)) {
+      setEmailError('Please enter a valid email address');
+    } else {
+      setEmailError('');
+    }
+  };
 
   const pickImage = async () => {
     try {
@@ -79,6 +98,12 @@ export default function EditScreen() {
   };
 
   const handleSave = async () => {
+    // Validate email before saving
+    if (email && !validateEmail(email)) {
+      setEmailError('Please enter a valid email address');
+      return;
+    }
+
     try {
       setLoading(true);
       const user = auth.currentUser;
@@ -87,6 +112,7 @@ export default function EditScreen() {
       const docRef = doc(db, "users", user.uid);
       await updateDoc(docRef, {
         name,
+        email,
         profilePhotoURL, // Now contains Firebase Storage download URL
       });
 
@@ -119,10 +145,24 @@ export default function EditScreen() {
         onChangeText={setName}
       />
 
+      <TextInput
+        style={[styles.input, emailError ? styles.inputError : null]}
+        placeholder="Enter your email"
+        value={email}
+        onChangeText={handleEmailChange}
+        keyboardType="email-address"
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+      
+      {emailError ? (
+        <ThemedText style={styles.errorText}>{emailError}</ThemedText>
+      ) : null}
+
       <TouchableOpacity 
-        style={[styles.saveButton, (loading || uploading) && styles.disabledButton]} 
+        style={[styles.saveButton, (loading || uploading || emailError) && styles.disabledButton]} 
         onPress={handleSave} 
-        disabled={loading || uploading}
+        disabled={loading || uploading || !!emailError}
       >
         <ThemedText style={styles.saveText}>
           {loading ? "Saving..." : uploading ? "Uploading..." : "Save"}
@@ -174,5 +214,16 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     backgroundColor: "#ccc",
+  },
+  inputError: {
+    borderColor: "#FF3B30",
+    borderWidth: 2,
+  },
+  errorText: {
+    color: "#FF3B30",
+    fontSize: 14,
+    marginTop: -20,
+    marginBottom: 20,
+    alignSelf: "flex-start",
   },
 });
