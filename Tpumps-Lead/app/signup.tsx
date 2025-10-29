@@ -12,16 +12,18 @@ import {
 } from 'react-native';
 import { Link, router } from 'expo-router';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../firebaseConfig';
+import { auth, db } from '../firebaseConfig';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function SignupScreen() {
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSignup = async () => {
-    if (!email || !password || !confirmPassword) {
+    if (!name ||!email || !password || !confirmPassword) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
@@ -38,7 +40,19 @@ export default function SignupScreen() {
 
     setLoading(true);
     try {
-      await createUserWithEmailAndPassword(auth, email, password);
+      // Create user in Firebase Auth
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      // Create user in Firestore
+      await setDoc(doc(db, 'users', user.uid), {
+        name: name,
+        profilePhotoURL: "",
+        email: user.email,
+        dateJoined: serverTimestamp(),
+      });
+
+      // Navigate to home screen
       router.replace('/(tabs)');
     } catch (error: any) {
       Alert.alert('Signup Failed', error.message);
@@ -62,6 +76,15 @@ export default function SignupScreen() {
         </View>
         <Text style={styles.title}>Create Account</Text>
         <Text style={styles.subtitle}>New Lead? Sign up to get started</Text>
+
+        <TextInput
+          style={styles.input}
+          placeholder="Name"
+          placeholderTextColor="#999"
+          value={name}
+          onChangeText={setName}
+          autoCapitalize="none"
+        />
 
         <TextInput
           style={styles.input}
