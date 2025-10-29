@@ -1,4 +1,4 @@
-import { Image } from 'expo-image';
+import { Image } from 'react-native';
 import { Platform, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 
 import { HelloWave } from '@/components/hello-wave';
@@ -24,10 +24,12 @@ export default function ProfileScreen() {
       if (!user) return;
       const docRef = doc(db, 'users', user.uid);
       const docSnap = await getDoc(docRef);
-      console.log(docSnap.data());
+      const profileData = docSnap.data();
+      //console.log('Profile data:', profileData);
+      //console.log('Profile photo URL:', profileData?.profilePhotoURL);
 
       if(docSnap.exists()) {
-        setProfile(docSnap.data());
+        setProfile(profileData);
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to fetch profile');
@@ -78,12 +80,15 @@ export default function ProfileScreen() {
       <ThemedView style={styles.profileContainer}>
         {profile ? (
           <ThemedView style={styles.profileInfo}>
-            {profile.profilePhotoURL && (
-              <Image
-                source={{ uri: profile.profilePhotoURL }}
-                style={styles.profileImage}
-              />
-            )}
+            <Image
+              source={profile.profilePhotoURL 
+                ? profile.profilePhotoURL.startsWith('data:') 
+                  ? { uri: profile.profilePhotoURL }
+                  : { uri: `data:image/jpeg;base64,${profile.profilePhotoURL}` }
+                : require('@/assets/images/icon.png')}
+              style={styles.profileImage}
+              onError={(error) => console.log('Image load error:', error)}
+            />
             <ThemedText type="subtitle" style={styles.welcomeText}>
               Welcome, {profile.name || "No Name Set"}
             </ThemedText>

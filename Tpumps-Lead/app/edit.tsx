@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, TextInput, TouchableOpacity, StyleSheet, Alert, Image } from 'react-native';
-import { auth, db, storage } from '../firebaseConfig';
+import { auth, db } from '../firebaseConfig';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
@@ -12,6 +11,7 @@ export default function EditScreen() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [profilePhotoURL, setProfilePhotoURL] = useState('');
+  const [localImageUri, setLocalImageUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [emailError, setEmailError] = useState('');
@@ -51,47 +51,87 @@ export default function EditScreen() {
 
   const pickImage = async () => {
     try {
+      // Request smaller image to fit within Firestore's 1MB limit
       const result = await ImagePicker.launchImageLibraryAsync({
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.7,
+        quality: 0.3, // Lower quality to reduce size
+        allowsMultipleSelection: false,
       });
 
       if (!result.canceled) {
         const imageUri = result.assets[0].uri;
-        setProfilePhotoURL(imageUri); // Set local URI for preview
+        setLocalImageUri(imageUri); // Set local URI for preview only
+        setUploading(true); // Show uploading state
         
-        // Upload to Firebase Storage
-        await uploadImageToStorage(imageUri);
+        // Convert to base64 and store in Firestore
+        await uploadImageToFirestore(imageUri);
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to pick image');
     }
   };
 
-  const uploadImageToStorage = async (imageUri: string) => {
+  const uploadImageToFirestore = async (imageUri: string) => {
     try {
       setUploading(true);
       const user = auth.currentUser;
-      if (!user) return;
+      if (!user) {
+        console.log('No user found');
+        return;
+      }
 
-      // Convert image URI to blob
-      const response = await fetch(imageUri);
-      const blob = await response.blob();
+      console.log('Starting upload to Firestore, imageUri:', imageUri);
 
-      // Create a reference to the image in Firebase Storage
-      const imageRef = ref(storage, `profile-images/${user.uid}`);
+      // Convert image URI to base64 string
+      const base64String = await new Promise<string>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.onload = function() {
+          const reader = new FileReader();
+          reader.onloadend = function() {
+            const base64data = reader.result as string;
+            // Extract base64 data (remove data:image/jpeg;base64, prefix)
+            const base64Data = base64data.split(',')[1];
+            resolve(base64Data);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(xhr.response);
+        };
+        xhr.onerror = () => reject(new Error('Failed to load image'));
+        xhr.responseType = 'blob';
+        xhr.open('GET', imageUri);
+        xhr.send();
+      });
 
-      // Upload the image
-      await uploadBytes(imageRef, blob);
+      console.log('Converted to base64, length:', base64String.length);
+      
+      // Check if image is too large (Firestore has 1MB limit)
+      const sizeInBytes = (base64String.length * 3) / 4;
+      const sizeInMB = sizeInBytes / (1024 * 1024);
+      console.log('Image size:', sizeInMB.toFixed(2), 'MB');
+      
+      if (sizeInMB > 0.9) { // Leave some buffer
+        throw new Error('Image is too large. Please choose a smaller image.');
+      }
 
-      // Get the download URL
-      const downloadURL = await getDownloadURL(imageRef);
+      // Store the base64 string in Firestore
+      const docRef = doc(db, "users", user.uid);
+      await updateDoc(docRef, {
+        profilePhotoURL: base64String, // Store base64 directly
+      });
 
-      // Update the profilePhotoURL state with the download URL
-      setProfilePhotoURL(downloadURL);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to upload image');
+      console.log('Upload successful to Firestore');
+
+      // Update the profilePhotoURL state with the base64 string
+      setProfilePhotoURL(base64String);
+      setLocalImageUri(null); // Clear local URI since we now have the base64 data
+    } catch (error: any) {
+      console.error('Upload error details:', error);
+      console.error('Error message:', error.message);
+      console.error('Error code:', error.code);
+      console.error('Error stack:', error.stack);
+      Alert.alert('Error', `Failed to upload image: ${error.message || 'Unknown error'}`);
+      setLocalImageUri(null); // Clear local URI on error
     } finally {
       setUploading(false);
     }
@@ -113,7 +153,7 @@ export default function EditScreen() {
       await updateDoc(docRef, {
         name,
         email,
-        profilePhotoURL, // Now contains Firebase Storage download URL
+        profilePhotoURL, // Contains base64 string if image was uploaded
       });
 
       Alert.alert("Success", "Profile updated!");
@@ -129,8 +169,15 @@ export default function EditScreen() {
     <ThemedView style={styles.container}>
       <TouchableOpacity onPress={pickImage} disabled={uploading}>
         <Image
-          source={profilePhotoURL ? { uri: profilePhotoURL } : require('@/assets/images/icon.png')}
+          source={
+            localImageUri 
+              ? { uri: localImageUri } 
+              : profilePhotoURL 
+                ? { uri: `data:image/jpeg;base64,${profilePhotoURL}` } 
+                : require('@/assets/images/icon.png')
+          }
           style={styles.avatar}
+          onError={(error) => console.log('Image load error:', error)}
         />
       </TouchableOpacity>
       
