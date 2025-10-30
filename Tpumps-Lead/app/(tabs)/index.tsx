@@ -11,6 +11,7 @@ import { auth, db } from '../../firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
 import { useEffect, useState, useCallback } from 'react';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import BreakScheduler from '@/components/break-scheduler';
 
 export default function HomeScreen() {
   const [userData, setUserData] = useState<any>(null);
@@ -121,6 +122,8 @@ export default function HomeScreen() {
           <ThemedText style={styles.actionButtonText}>Reports</ThemedText>
         </TouchableOpacity>
       </ThemedView>
+
+      <BreakScheduler />
 
       <View style={styles.infoContainer}>
         <Text style={styles.infoTitle}>Your Account</Text>
