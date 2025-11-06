@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Image, ScrollView, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Image, ScrollView, TextInput, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { extractTextFromImage } from '@/utils/ocrService';
+import { GOOGLE_CLOUD_VISION_API_KEY } from '@/config/ocrConfig';
 
 interface EmployeeShift {
   name: string;
@@ -20,7 +22,9 @@ export default function BreakScheduler({ onSchedulesGenerated }: BreakSchedulerP
   const [manualInput, setManualInput] = useState('');
   const [schedules, setSchedules] = useState<EmployeeShift[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isOCRProcessing, setIsOCRProcessing] = useState(false);
   const [showManualInput, setShowManualInput] = useState(false);
+  const [ocrError, setOcrError] = useState<string | null>(null);
 
   const pickImage = async () => {
     try {
@@ -31,17 +35,96 @@ export default function BreakScheduler({ onSchedulesGenerated }: BreakSchedulerP
       });
 
       if (!result.canceled && result.assets[0]) {
-        setImageUri(result.assets[0].uri);
+        const uri = result.assets[0].uri;
+        setImageUri(uri);
         setManualInput('');
-        // For now, we'll use manual input. OCR can be added later
-        Alert.alert(
-          'Image Selected',
-          'Please enter the schedule manually for now. OCR parsing coming soon!',
-          [{ text: 'OK', onPress: () => setShowManualInput(true) }]
-        );
+        setOcrError(null);
+        
+        // Automatically process with OCR
+        await processImageWithOCR(uri);
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to pick image');
+    }
+  };
+
+  const processImageWithOCR = async (uri: string) => {
+    // Check if API key is configured
+    if (!GOOGLE_CLOUD_VISION_API_KEY || GOOGLE_CLOUD_VISION_API_KEY === 'YOUR_GOOGLE_CLOUD_VISION_API_KEY_HERE') {
+      Alert.alert(
+        'OCR Not Configured',
+        'Please configure your Google Cloud Vision API key in config/ocrConfig.ts. For now, you can enter the schedule manually.',
+        [
+          { text: 'Enter Manually', onPress: () => setShowManualInput(true) },
+          { text: 'Cancel', style: 'cancel' }
+        ]
+      );
+      return;
+    }
+
+    setIsOCRProcessing(true);
+    setOcrError(null);
+
+    try {
+      // Extract text from image using OCR
+      const result = await extractTextFromImage(uri, GOOGLE_CLOUD_VISION_API_KEY);
+      
+      if (result.text && result.text.trim().length > 0) {
+        // Set the extracted text to manual input for user review/editing
+        setManualInput(result.text);
+        
+        // Automatically try to parse and process
+        const parsed = parseSchedule(result.text);
+        
+        if (parsed.length > 0) {
+          // Successfully parsed, show results
+          setSchedules(parsed);
+          if (onSchedulesGenerated) {
+            onSchedulesGenerated(parsed);
+          }
+          Alert.alert(
+            'Success!',
+            `Extracted ${parsed.length} employee schedule(s) from the image.`,
+            [{ text: 'OK' }]
+          );
+          setShowManualInput(false); // Hide manual input since we got results
+        } else {
+          // OCR extracted text but couldn't parse it
+          Alert.alert(
+            'Text Extracted',
+            'OCR extracted text from the image, but couldn\'t automatically parse it. Please review and edit the text below.',
+            [
+              { text: 'Review & Edit', onPress: () => setShowManualInput(true) },
+              { text: 'Cancel', style: 'cancel' }
+            ]
+          );
+        }
+      } else {
+        // No text found in image
+        Alert.alert(
+          'No Text Found',
+          'Could not extract text from the image. Please try again with a clearer image or enter the schedule manually.',
+          [
+            { text: 'Enter Manually', onPress: () => setShowManualInput(true) },
+            { text: 'Try Again', style: 'cancel' }
+          ]
+        );
+      }
+    } catch (error: any) {
+      console.error('OCR Processing Error:', error);
+      const errorMessage = error.message || 'Failed to process image with OCR';
+      setOcrError(errorMessage);
+      
+      Alert.alert(
+        'OCR Error',
+        `Failed to process image: ${errorMessage}\n\nYou can still enter the schedule manually.`,
+        [
+          { text: 'Enter Manually', onPress: () => setShowManualInput(true) },
+          { text: 'OK', style: 'cancel' }
+        ]
+      );
+    } finally {
+      setIsOCRProcessing(false);
     }
   };
 
@@ -96,34 +179,95 @@ export default function BreakScheduler({ onSchedulesGenerated }: BreakSchedulerP
   };
 
   const parseSchedule = (text: string): EmployeeShift[] => {
-    const lines = text.split('\n').filter(line => line.trim());
+    // Clean up OCR text - remove extra whitespace and normalize
+    const cleanedText = text
+      .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+      .replace(/\n\s*\n/g, '\n') // Remove empty lines
+      .trim();
+    
+    const lines = cleanedText.split('\n').filter(line => line.trim());
     const shifts: EmployeeShift[] = [];
-    const shiftLeadStartTime = lines[0]?.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i)?.[0] || '';
+    
+    // Find the shift lead start time (usually first time mentioned)
+    const firstTimeMatch = cleanedText.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+    const shiftLeadStartTime = firstTimeMatch ? firstTimeMatch[0] : '';
     const leadStart = parseTime(shiftLeadStartTime);
     
-    // Simple pattern matching: "Name StartTime-EndTime" or "Name StartTime to EndTime"
+    // Enhanced pattern matching for OCR output
+    // Patterns to match:
+    // 1. "Name StartTime-EndTime" or "Name StartTime to EndTime"
+    // 2. "Name: StartTime-EndTime"
+    // 3. "Name StartTime EndTime" (without dash)
+    // 4. Handle OCR artifacts like "|", "-", "—"
+    
     lines.forEach((line, index) => {
+      // Clean line of common OCR artifacts
+      const cleanLine = line
+        .replace(/[|│]/g, '|') // Normalize pipe characters
+        .replace(/[—–]/g, '-') // Normalize dashes
+        .replace(/\s+/g, ' ') // Normalize spaces
+        .trim();
+      
+      // Pattern to match times (more flexible for OCR)
       const timePattern = /(\d{1,2}):(\d{2})\s*(AM|PM)/gi;
-      const times = line.match(timePattern);
+      const timeMatches = cleanLine.matchAll(timePattern);
+      const times = Array.from(timeMatches);
       
       if (times && times.length >= 2) {
-        const startTime = parseTime(times[0]);
-        const endTime = parseTime(times[1]);
-        const nameMatch = line.match(/^([^0-9]+)/);
-        const name = nameMatch ? nameMatch[1].trim() : `Employee ${index + 1}`;
-        const hours = (endTime - startTime) / 60;
+        const startTimeStr = times[0][0]; // First time match
+        const endTimeStr = times[times.length - 1][0]; // Last time match
         
-        // Only add breaks if employee starts at same time or after shift lead
-        if (startTime >= leadStart && hours >= 5) {
-          const breaks = calculateBreaks(startTime, endTime);
-          shifts.push({
-            name,
-            startTime: times[0],
-            endTime: times[1],
-            hours: parseFloat(hours.toFixed(2)),
-            breaks,
-          });
+        const startTime = parseTime(startTimeStr);
+        const endTime = parseTime(endTimeStr);
+        
+        // Extract name - everything before the first time
+        const firstTimeIndex = times[0].index !== undefined ? times[0].index : cleanLine.indexOf(startTimeStr);
+        const nameMatch = cleanLine.substring(0, firstTimeIndex).trim();
+        // Remove common separators and clean up
+        const name = nameMatch
+          .replace(/[:|•·\-—]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim() || `Employee ${index + 1}`;
+        
+        // Validate times
+        if (startTime > 0 && endTime > startTime) {
+          const hours = (endTime - startTime) / 60;
+          
+          // Only add breaks if employee starts at same time or after shift lead
+          // and works at least 5 hours
+          if (startTime >= leadStart && hours >= 5) {
+            const breaks = calculateBreaks(startTime, endTime);
+            shifts.push({
+              name,
+              startTime: startTimeStr,
+              endTime: endTimeStr,
+              hours: parseFloat(hours.toFixed(2)),
+              breaks,
+            });
+          } else if (hours >= 5) {
+            // Still add if valid shift, even if before lead start
+            const breaks = calculateBreaks(startTime, endTime);
+            shifts.push({
+              name,
+              startTime: startTimeStr,
+              endTime: endTimeStr,
+              hours: parseFloat(hours.toFixed(2)),
+              breaks,
+            });
+          }
         }
+      } else if (times && times.length === 1) {
+        // Single time found - might be a partial entry, try to extract more info
+        const timeStr = times[0][0];
+        const firstTimeIndex = times[0].index !== undefined ? times[0].index : cleanLine.indexOf(timeStr);
+        const nameMatch = cleanLine.substring(0, firstTimeIndex).trim();
+        const name = nameMatch
+          .replace(/[:|•·\-—]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim() || `Employee ${index + 1}`;
+        
+        // Could be just start time, log for manual review
+        console.log(`Partial entry found: ${name} - ${timeStr}`);
       }
     });
     
@@ -162,7 +306,21 @@ export default function BreakScheduler({ onSchedulesGenerated }: BreakSchedulerP
       </TouchableOpacity>
 
       {imageUri && (
-        <Image source={{ uri: imageUri }} style={styles.previewImage} />
+        <View style={styles.imageContainer}>
+          <Image source={{ uri: imageUri }} style={styles.previewImage} />
+          {isOCRProcessing && (
+            <View style={styles.ocrOverlay}>
+              <ActivityIndicator size="large" color="#007AFF" />
+              <Text style={styles.ocrText}>Processing image with OCR...</Text>
+            </View>
+          )}
+        </View>
+      )}
+
+      {ocrError && (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>OCR Error: {ocrError}</Text>
+        </View>
       )}
 
       <TouchableOpacity
@@ -261,12 +419,44 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#007AFF',
   },
+  imageContainer: {
+    position: 'relative',
+    marginBottom: 12,
+  },
   previewImage: {
     width: '100%',
     height: 200,
     borderRadius: 12,
-    marginBottom: 12,
     backgroundColor: '#f0f0f0',
+  },
+  ocrOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+  },
+  ocrText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  errorContainer: {
+    backgroundColor: '#FFEBEE',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#FFCDD2',
+  },
+  errorText: {
+    color: '#C62828',
+    fontSize: 14,
   },
   toggleButton: {
     padding: 12,
