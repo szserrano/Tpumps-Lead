@@ -5,6 +5,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { extractTextFromImage } from '@/utils/ocrService';
 import { GOOGLE_CLOUD_VISION_API_KEY } from '@/config/ocrConfig';
 
+// Create a type for the employee shift
 interface EmployeeShift {
   name: string;
   startTime: string;
@@ -13,6 +14,7 @@ interface EmployeeShift {
   breaks: string[];
 }
 
+// Create a type for the break scheduler props
 interface BreakSchedulerProps {
   onSchedulesGenerated?: (schedules: EmployeeShift[]) => void;
 }
@@ -72,9 +74,11 @@ export default function BreakScheduler({ onSchedulesGenerated }: BreakSchedulerP
       if (result.text && result.text.trim().length > 0) {
         // Set the extracted text to manual input for user review/editing
         setManualInput(result.text);
+        console.log(result.text);
         
         // Automatically try to parse and process
         const parsed = parseSchedule(result.text);
+        console.log("parsed from result.text", parsed)
         
         if (parsed.length > 0) {
           // Successfully parsed, show results
@@ -184,8 +188,9 @@ export default function BreakScheduler({ onSchedulesGenerated }: BreakSchedulerP
       .replace(/\s+/g, ' ') // Replace multiple spaces with single space
       .replace(/\n\s*\n/g, '\n') // Remove empty lines
       .trim();
-    
+    console.log("cleanedText here:", cleanedText)
     const lines = cleanedText.split('\n').filter(line => line.trim());
+    console.log("lines here:", lines)
     const shifts: EmployeeShift[] = [];
     
     // Find the shift lead start time (usually first time mentioned)
