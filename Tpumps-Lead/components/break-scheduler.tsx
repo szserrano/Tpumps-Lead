@@ -74,7 +74,7 @@ export default function BreakScheduler({ onSchedulesGenerated }: BreakSchedulerP
       if (result.text && result.text.trim().length > 0) {
         // Set the extracted text to manual input for user review/editing
         setManualInput(result.text);
-        console.log(result.text);
+        console.log('original text from result.text', result.text);
         
         // Automatically try to parse and process
         const parsed = parseSchedule(result.text);
@@ -185,7 +185,7 @@ export default function BreakScheduler({ onSchedulesGenerated }: BreakSchedulerP
   const parseSchedule = (text: string): EmployeeShift[] => {
     // Clean up OCR text - remove extra whitespace and normalize
     const cleanedText = text
-      .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+      .replace(/\s+/g, ' ') // Replace multiple spaces (and newlines) with single space
       .replace(/\n\s*\n/g, '\n') // Remove empty lines
       .trim();
     console.log("cleanedText here:", cleanedText)
