@@ -184,17 +184,18 @@ export default function BreakScheduler({ onSchedulesGenerated }: BreakSchedulerP
 
   const parseSchedule = (text: string): EmployeeShift[] => {
     // Clean up OCR text - remove extra whitespace and normalize
-    const cleanedText = text
-      .replace(/\s+/g, ' ') // Replace multiple spaces (and newlines) with single space
-      .replace(/\n\s*\n/g, '\n') // Remove empty lines
-      .trim();
-    console.log("cleanedText here:", cleanedText)
-    const lines = cleanedText.split('\n').filter(line => line.trim());
+    // const cleanedText = text
+    //   .replace(/\s+/g, ' ') // Replace multiple spaces (and newlines) with single space
+    //   .replace(/\n\s*\n/g, '\n') // Remove empty lines
+    //   .trim();
+    // console.log("cleanedText here:", cleanedText)
+    
+    const lines = text.split('\n').filter(line => line.trim()); // split the text by new lines and trim the whitespace
     console.log("lines here:", lines)
     const shifts: EmployeeShift[] = [];
     
     // Find the shift lead start time (usually first time mentioned)
-    const firstTimeMatch = cleanedText.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+    const firstTimeMatch = text.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
     const shiftLeadStartTime = firstTimeMatch ? firstTimeMatch[0] : '';
     const leadStart = parseTime(shiftLeadStartTime);
     
@@ -205,6 +206,8 @@ export default function BreakScheduler({ onSchedulesGenerated }: BreakSchedulerP
     // 3. "Name StartTime EndTime" (without dash)
     // 4. Handle OCR artifacts like "|", "-", "—"
     
+    // loop through each line and parse the schedule. Times are read, but names are a bit more tricky. Roles not needed for now.
+    // Need a regex to match names, then times need to be parsed and stored correctly so that the start and end times are formatted correctly.
     lines.forEach((line, index) => {
       // Clean line of common OCR artifacts
       const cleanLine = line
@@ -217,6 +220,7 @@ export default function BreakScheduler({ onSchedulesGenerated }: BreakSchedulerP
       const timePattern = /(\d{1,2}):(\d{2})\s*(AM|PM)/gi;
       const timeMatches = cleanLine.matchAll(timePattern);
       const times = Array.from(timeMatches);
+      console.log("times here:", times)
       
       if (times && times.length >= 2) {
         const startTimeStr = times[0][0]; // First time match
