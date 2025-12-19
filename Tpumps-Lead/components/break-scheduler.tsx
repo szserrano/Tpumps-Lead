@@ -219,6 +219,7 @@ export default function BreakScheduler({ onSchedulesGenerated }: BreakSchedulerP
       // Pattern to match times (more flexible for OCR)
       const timePattern = /(\d{1,2}):(\d{2})\s*(AM|PM)/gi;
       const timeMatches = cleanLine.matchAll(timePattern);
+      console.log("timeMatches here:", timeMatches)
       const times = Array.from(timeMatches);
       console.log("times here:", times)
       
