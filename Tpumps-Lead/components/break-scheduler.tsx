@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Alert, Image, ScrollView, Tex
 import * as ImagePicker from 'expo-image-picker';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { extractTextFromImage } from '@/utils/ocrService';
+import { useQueue } from '@uidotdev/usehooks';
 import { GOOGLE_CLOUD_VISION_API_KEY } from '@/config/ocrConfig';
 
 // Create a type for the employee shift
@@ -198,6 +199,7 @@ export default function BreakScheduler({ onSchedulesGenerated }: BreakSchedulerP
     const firstTimeMatch = text.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
     const shiftLeadStartTime = firstTimeMatch ? firstTimeMatch[0] : '';
     const leadStart = parseTime(shiftLeadStartTime);
+    const {add, remove, clear, first, last, size, queue} = useQueue(); // Queue to store the emp names, shift start/end times to assemble into shifts
     
     // Enhanced pattern matching for OCR output
     // Patterns to match:
