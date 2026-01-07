@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, TouchableOpacity, Alert, Image, ScrollView, Tex
 import * as ImagePicker from 'expo-image-picker';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { extractTextFromImage } from '@/utils/ocrService';
-import { useQueue } from '@uidotdev/usehooks';
 import { GOOGLE_CLOUD_VISION_API_KEY } from '@/config/ocrConfig';
 
 // Create a type for the employee shift
@@ -15,6 +14,12 @@ interface EmployeeShift {
   breaks: string[];
 }
 
+interface RawEmployeeShift {
+  name: string;
+  startTime: string;
+  endTime: string;
+  hours: string;
+}
 // Create a type for the break scheduler props
 interface BreakSchedulerProps {
   onSchedulesGenerated?: (schedules: EmployeeShift[]) => void;
@@ -133,6 +138,19 @@ export default function BreakScheduler({ onSchedulesGenerated }: BreakSchedulerP
     }
   };
 
+  // Helper functions to check if the line is a name, time, duration, or avatar initials to be ignored
+  const isName = (line: string) =>
+    /^[A-Za-z]+\s[A-Z]\.?$/.test(line.trim());
+  
+  const isTime = (line: string) =>
+    /^\d{1,2}:\d{2}\s?(am|pm)$/i.test(line.trim());
+  
+  const isDuration = (line: string) =>
+    /^\d+(\.\d+)?\s?hr(s)?$/i.test(line.trim());
+
+  const isAvatarInitials = (line: string) =>
+    /^[A-Z]{1,3}$/.test(line.trim());
+
   const parseTime = (timeStr: string): number => {
     // Parse time string like "9:00 AM" or "14:30" to minutes since midnight
     const cleanTime = timeStr.trim().toUpperCase();
@@ -183,34 +201,56 @@ export default function BreakScheduler({ onSchedulesGenerated }: BreakSchedulerP
     return breaks;
   };
 
-  const parseSchedule = (text: string): EmployeeShift[] => {
-    // Clean up OCR text - remove extra whitespace and normalize
-    // const cleanedText = text
-    //   .replace(/\s+/g, ' ') // Replace multiple spaces (and newlines) with single space
-    //   .replace(/\n\s*\n/g, '\n') // Remove empty lines
-    //   .trim();
-    // console.log("cleanedText here:", cleanedText)
+  // Type guard to check if Partial<RawEmployeeShift> is a complete RawEmployeeShift
+  const isCompleteRawShift = (shift: Partial<RawEmployeeShift> | null): shift is RawEmployeeShift => {
+    return shift !== null && 
+           typeof shift.name === 'string' && shift.name !== '' &&
+           typeof shift.startTime === 'string' && shift.startTime !== '' &&
+           typeof shift.endTime === 'string' && shift.endTime !== '';
+  };
+
+  // Convert RawEmployeeShift to EmployeeShift
+  const convertToEmployeeShift = (rawShift: RawEmployeeShift): EmployeeShift | null => {
+    const startTime = parseTime(rawShift.startTime);
+    const endTime = parseTime(rawShift.endTime);
     
+    // Validate times
+    if (startTime <= 0 || endTime <= startTime) {
+      console.log(`Invalid times for ${rawShift.name}: ${rawShift.startTime} - ${rawShift.endTime}`);
+      return null;
+    }
+    
+    const hours = (endTime - startTime) / 60;
+    const breaks = calculateBreaks(startTime, endTime);
+    
+    return {
+      name: rawShift.name,
+      startTime: rawShift.startTime,
+      endTime: rawShift.endTime,
+      hours: parseFloat(hours.toFixed(2)),
+      breaks,
+    };
+  };
+
+  const parseSchedule = (text: string): EmployeeShift[] => {
     const lines = text.split('\n').filter(line => line.trim()); // split the text by new lines and trim the whitespace
-    console.log("lines here:", lines)
+    console.log("lines here:", lines);
+    
+    const rawShifts: RawEmployeeShift[] = [];
     const shifts: EmployeeShift[] = [];
     
     // Find the shift lead start time (usually first time mentioned)
     const firstTimeMatch = text.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
     const shiftLeadStartTime = firstTimeMatch ? firstTimeMatch[0] : '';
     const leadStart = parseTime(shiftLeadStartTime);
-    const {add, remove, clear, first, last, size, queue} = useQueue(); // Queue to store the emp names, shift start/end times to assemble into shifts
     
-    // Enhanced pattern matching for OCR output
-    // Patterns to match:
-    // 1. "Name StartTime-EndTime" or "Name StartTime to EndTime"
-    // 2. "Name: StartTime-EndTime"
-    // 3. "Name StartTime EndTime" (without dash)
-    // 4. Handle OCR artifacts like "|", "-", "—"
+    // Track current employee being processed
+    let currentEmployee: Partial<RawEmployeeShift> | null = null;
     
-    // loop through each line and parse the schedule. Times are read, but names are a bit more tricky. Roles not needed for now.
-    // Need a regex to match names, then times need to be parsed and stored correctly so that the start and end times are formatted correctly.
-    lines.forEach((line, index) => {
+    // Loop through each line and parse the schedule line by line
+    for (let index = 0; index < lines.length; index++) {
+      const line = lines[index];
+      
       // Clean line of common OCR artifacts
       const cleanLine = line
         .replace(/[|│]/g, '|') // Normalize pipe characters
@@ -218,71 +258,151 @@ export default function BreakScheduler({ onSchedulesGenerated }: BreakSchedulerP
         .replace(/\s+/g, ' ') // Normalize spaces
         .trim();
       
-      // Pattern to match times (more flexible for OCR)
-      const timePattern = /(\d{1,2}):(\d{2})\s*(AM|PM)/gi;
-      const timeMatches = cleanLine.matchAll(timePattern);
-      console.log("timeMatches here:", timeMatches)
-      const times = Array.from(timeMatches);
-      console.log("times here:", times)
+      // Skip avatar initials and empty lines
+      if (isAvatarInitials(cleanLine) || !cleanLine) {
+        continue;
+      }
       
-      if (times && times.length >= 2) {
-        const startTimeStr = times[0][0]; // First time match
-        const endTimeStr = times[times.length - 1][0]; // Last time match
+      // Check if this line contains a name
+      if (isName(cleanLine)) {
+        // If we have a previous employee being processed, save it before starting a new one
+        if (isCompleteRawShift(currentEmployee)) {
+          rawShifts.push({
+            name: currentEmployee.name,
+            startTime: currentEmployee.startTime,
+            endTime: currentEmployee.endTime,
+            hours: currentEmployee.hours || '',
+          });
+        }
         
-        const startTime = parseTime(startTimeStr);
-        const endTime = parseTime(endTimeStr);
+        // Start a new employee
+        currentEmployee = {
+          name: cleanLine.trim(),
+          startTime: '',
+          endTime: '',
+          hours: '',
+        };
+        continue;
+      }
+      
+      // Check if this line contains times
+      const timePattern = /(\d{1,2}):(\d{2})\s*(AM|PM)/gi;
+      const timeMatches = Array.from(cleanLine.matchAll(timePattern));
+      
+      if (timeMatches.length >= 2) {
+        // We have both start and end times on this line
+        const startTimeStr = timeMatches[0][0];
+        const endTimeStr = timeMatches[timeMatches.length - 1][0];
         
-        // Extract name - everything before the first time
-        const firstTimeIndex = times[0].index !== undefined ? times[0].index : cleanLine.indexOf(startTimeStr);
-        const nameMatch = cleanLine.substring(0, firstTimeIndex).trim();
-        // Remove common separators and clean up
-        const name = nameMatch
-          .replace(/[:|•·\-—]/g, '')
-          .replace(/\s+/g, ' ')
-          .trim() || `Employee ${index + 1}`;
-        
-        // Validate times
-        if (startTime > 0 && endTime > startTime) {
-          const hours = (endTime - startTime) / 60;
+        // If we don't have a current employee, try to extract name from this line
+        if (!currentEmployee) {
+          const firstTimeIndex = timeMatches[0].index !== undefined ? timeMatches[0].index : cleanLine.indexOf(startTimeStr);
+          const nameMatch = cleanLine.substring(0, firstTimeIndex).trim();
+          const name = nameMatch
+            .replace(/[:|•·\-—]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim() || `Employee ${index + 1}`;
           
-          // Only add breaks if employee starts at same time or after shift lead
-          // and works at least 5 hours
-          if (startTime >= leadStart && hours >= 5) {
-            const breaks = calculateBreaks(startTime, endTime);
-            shifts.push({
-              name,
-              startTime: startTimeStr,
-              endTime: endTimeStr,
-              hours: parseFloat(hours.toFixed(2)),
-              breaks,
-            });
-          } else if (hours >= 5) {
-            // Still add if valid shift, even if before lead start
-            const breaks = calculateBreaks(startTime, endTime);
-            shifts.push({
-              name,
-              startTime: startTimeStr,
-              endTime: endTimeStr,
-              hours: parseFloat(hours.toFixed(2)),
-              breaks,
-            });
+          currentEmployee = {
+            name,
+            startTime: startTimeStr,
+            endTime: endTimeStr,
+            hours: '',
+          };
+        } else {
+          // Update current employee with times
+          currentEmployee.startTime = startTimeStr;
+          currentEmployee.endTime = endTimeStr;
+        }
+        
+        // Save this employee shift
+        if (isCompleteRawShift(currentEmployee)) {
+          rawShifts.push({
+            name: currentEmployee.name,
+            startTime: currentEmployee.startTime,
+            endTime: currentEmployee.endTime,
+            hours: currentEmployee.hours || '',
+          });
+          currentEmployee = null; // Reset for next employee
+        }
+      } else if (timeMatches.length === 1) {
+        // Single time found - could be start or end time
+        const timeStr = timeMatches[0][0];
+        
+        if (!currentEmployee) {
+          // Try to extract name and use this as start time
+          const firstTimeIndex = timeMatches[0].index !== undefined ? timeMatches[0].index : cleanLine.indexOf(timeStr);
+          const nameMatch = cleanLine.substring(0, firstTimeIndex).trim();
+          const name = nameMatch
+            .replace(/[:|•·\-—]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim() || `Employee ${index + 1}`;
+          
+          currentEmployee = {
+            name,
+            startTime: timeStr,
+            endTime: '',
+            hours: '',
+          };
+        } else {
+          // If we have a name but no start time, this is the start time
+          if (!currentEmployee.startTime) {
+            currentEmployee.startTime = timeStr;
+          } else if (!currentEmployee.endTime) {
+            // If we have start time, this is the end time
+            currentEmployee.endTime = timeStr;
+            
+            // Save this employee shift
+            if (isCompleteRawShift(currentEmployee)) {
+              rawShifts.push({
+                name: currentEmployee.name,
+                startTime: currentEmployee.startTime,
+                endTime: currentEmployee.endTime,
+                hours: currentEmployee.hours || '',
+              });
+              currentEmployee = null; // Reset for next employee
+            }
           }
         }
-      } else if (times && times.length === 1) {
-        // Single time found - might be a partial entry, try to extract more info
-        const timeStr = times[0][0];
-        const firstTimeIndex = times[0].index !== undefined ? times[0].index : cleanLine.indexOf(timeStr);
-        const nameMatch = cleanLine.substring(0, firstTimeIndex).trim();
-        const name = nameMatch
-          .replace(/[:|•·\-—]/g, '')
-          .replace(/\s+/g, ' ')
-          .trim() || `Employee ${index + 1}`;
-        
-        // Could be just start time, log for manual review
-        console.log(`Partial entry found: ${name} - ${timeStr}`);
+      } else if (isDuration(cleanLine)) {
+        // Duration line - extract hours if needed
+        if (currentEmployee) {
+          currentEmployee.hours = cleanLine.trim();
+        }
+      }
+      // If line doesn't match any pattern, continue to next line
+    }
+    
+    // Don't forget the last employee if we're still processing one
+    if (isCompleteRawShift(currentEmployee)) {
+      const { name, startTime, endTime, hours } = currentEmployee;
+      rawShifts.push({
+        name,
+        startTime,
+        endTime,
+        hours: hours || '',
+      });
+    }
+    
+    console.log("Raw shifts created:", rawShifts);
+    
+    // Convert RawEmployeeShift objects to EmployeeShift objects
+    rawShifts.forEach((rawShift) => {
+      const employeeShift = convertToEmployeeShift(rawShift);
+      if (employeeShift) {
+        // Only add breaks if employee starts at same time or after shift lead
+        // and works at least 5 hours
+        const startTime = parseTime(employeeShift.startTime);
+        if (startTime >= leadStart && employeeShift.hours >= 5) {
+          shifts.push(employeeShift);
+        } else if (employeeShift.hours >= 5) {
+          // Still add if valid shift, even if before lead start
+          shifts.push(employeeShift);
+        }
       }
     });
     
+    console.log("Final shifts:", shifts);
     return shifts;
   };
 
