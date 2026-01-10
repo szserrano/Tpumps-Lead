@@ -177,6 +177,15 @@ export default function BreakScheduler({ onSchedulesGenerated }: BreakSchedulerP
     return `${displayHours}:${mins.toString().padStart(2, '0')} ${period}`;
   };
 
+  // Reformat the manual input to match the required format Name StartTime-EndTime
+  const formatManualInput = (array: EmployeeShift[]): void => {
+    let newManualInput = '';
+    for (let i = 0; i < array.length; i++) {
+      newManualInput += array[i].name + ' ' + array[i].startTime + '-' + array[i].endTime + '\n';
+    }
+    setManualInput(newManualInput);
+  }
+
   const calculateBreaks = (startTime: number, endTime: number): string[] => {
     const totalMinutes = endTime - startTime;
     const totalHours = totalMinutes / 60;
@@ -196,6 +205,9 @@ export default function BreakScheduler({ onSchedulesGenerated }: BreakSchedulerP
       breaks.push(formatTime(break1) + ' (30 min)');
       breaks.push(formatTime(break2) + ' (10 min)');
       breaks.push(formatTime(break3) + ' (10 min)');
+    } else {
+      breaks.push(formatTime(startTime + (totalMinutes * 0.5)) + ' (10 min)');
+      console.log("shift is less than 5 hours, should just have a 10 minute break");
     }
     
     return breaks;
@@ -410,6 +422,7 @@ export default function BreakScheduler({ onSchedulesGenerated }: BreakSchedulerP
     });
     
     console.log("Final shifts:", shifts);
+    formatManualInput(shifts); // Format the manual input to match the required format Name StartTime-EndTime before returning array of EmployeeShift
     return shifts;
   };
 
