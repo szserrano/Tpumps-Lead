@@ -267,6 +267,7 @@ export default function BreakScheduler({ onSchedulesGenerated }: BreakSchedulerP
       if (isName(cleanLine)) {
         // If we have a previous employee being processed, save it before starting a new one
         if (isCompleteRawShift(currentEmployee)) {
+          console.log("pushing currentEmployee to rawShifts before starting a new employee", currentEmployee);
           rawShifts.push({
             name: currentEmployee.name,
             startTime: currentEmployee.startTime,
@@ -274,7 +275,7 @@ export default function BreakScheduler({ onSchedulesGenerated }: BreakSchedulerP
             hours: currentEmployee.hours || '',
           });
         }
-        
+        console.log("starting a new employee", cleanLine.trim());
         // Start a new employee
         currentEmployee = {
           name: cleanLine.trim(),
@@ -317,6 +318,7 @@ export default function BreakScheduler({ onSchedulesGenerated }: BreakSchedulerP
         
         // Save this employee shift
         if (isCompleteRawShift(currentEmployee)) {
+          console.log("pushing currentEmployee to rawShifts after finding both times", currentEmployee);
           rawShifts.push({
             name: currentEmployee.name,
             startTime: currentEmployee.startTime,
@@ -354,6 +356,7 @@ export default function BreakScheduler({ onSchedulesGenerated }: BreakSchedulerP
             
             // Save this employee shift
             if (isCompleteRawShift(currentEmployee)) {
+              console.log("pushing currentEmployee to rawShifts after finding end time", currentEmployee);
               rawShifts.push({
                 name: currentEmployee.name,
                 startTime: currentEmployee.startTime,
@@ -398,6 +401,10 @@ export default function BreakScheduler({ onSchedulesGenerated }: BreakSchedulerP
         } else if (employeeShift.hours >= 5) {
           // Still add if valid shift, even if before lead start
           shifts.push(employeeShift);
+          console.log("shift is at least 5 hours, should have a 30 minute break and one or two 10 minute breaks depending on the total hours > 6");
+        } else {
+          shifts.push(employeeShift);
+          console.log("shift is less than 5 hours, should just have a 10 minute break");
         }
       }
     });
