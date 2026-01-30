@@ -191,14 +191,14 @@ export default function BreakScheduler({ onSchedulesGenerated }: BreakSchedulerP
     const totalHours = totalMinutes / 60;
     const breaks: string[] = [];
     
-    if (totalHours >= 5 && totalHours < 6.5) {
-      // One 30-minute break + One 10-minute break
+    if (totalHours >= 5 && totalHours < 6) {
+      // If shift is between 5 and 6 hours, give one 30-minute break + One 10-minute break
       const break1 = startTime + (totalMinutes * 0.25); // 25% into shift
       const break2 = startTime + (totalMinutes * 0.75); // 75% into shift
       breaks.push(formatTime(break1) + ' (30 min)');
       breaks.push(formatTime(break2) + ' (10 min)');
-    } else if (totalHours >= 6.5) {
-      // One 30-minute break + Two 10-minute breaks
+    } else if (totalHours >= 6) {
+      // If shift is more than 6 hours, give one 30-minute break + Two 10-minute breaks
       const break1 = startTime + (totalMinutes * 0.33); // 33% into shift
       const break2 = startTime + (totalMinutes * 0.55); // 55% into shift
       const break3 = startTime + (totalMinutes * 0.80); // 80% into shift
@@ -206,6 +206,7 @@ export default function BreakScheduler({ onSchedulesGenerated }: BreakSchedulerP
       breaks.push(formatTime(break2) + ' (10 min)');
       breaks.push(formatTime(break3) + ' (10 min)');
     } else {
+      // If shift is less than 5 hours, give one 10-minute break
       breaks.push(formatTime(startTime + (totalMinutes * 0.5)) + ' (10 min)');
       console.log("shift is less than 5 hours, should just have a 10 minute break");
     }
