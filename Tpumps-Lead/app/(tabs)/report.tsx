@@ -21,7 +21,9 @@ export default function ReportScreen() {
       setCurDate(month.toString().padStart(2, '0') + day.toString().padStart(2, '0') + year) //creates date for email subject
     }
       var hours = date.getHours()
-      {hours < 18 ? setSubject('FM Day Cashier ') : setSubject('FM NIGHT CASH ')}
+      if (hours < 11) {
+        setSubject('FM DAY CASH ')
+      } else {hours < 18 ? setSubject('FM Day Cashier ') : setSubject('FM NIGHT CASH ')}
   }, [])  
 
   const sendEmail = () => { //onPress function for Pressable
